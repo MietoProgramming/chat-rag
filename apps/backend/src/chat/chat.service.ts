@@ -4,10 +4,10 @@ import { AIMessage, HumanMessage } from '@langchain/core/messages'
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai'
 import {
-    Injectable,
-    InternalServerErrorException,
-    Logger,
-    ServiceUnavailableException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { ChatHistoryItemDto, ChatMessageRequestDto } from './dto/chat-message.dto'
@@ -15,6 +15,8 @@ import { ChatHistoryItemDto, ChatMessageRequestDto } from './dto/chat-message.dt
 const COLLECTION_NAME = 'rag-documents'
 const NO_CONTEXT_ANSWER =
   'I could not find relevant information in the uploaded documents to answer that question.'
+const DEFAULT_CHAT_MODEL = 'qwen/qwen3-8b'
+const DEFAULT_EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5'
 
 interface PromptInput {
   context: string
@@ -90,10 +92,16 @@ export class ChatService {
   }
 
   private createVectorStore(): Chroma {
+    const openAiBaseUrl = this.configService.get<string>('OPENAI_BASE_URL')
+    const embeddingModel =
+      this.configService.get<string>('OPENAI_EMBEDDING_MODEL') ?? DEFAULT_EMBEDDING_MODEL
+
     return new Chroma(
       new OpenAIEmbeddings({
-        model: 'text-embedding-3-small',
+        model: embeddingModel,
+        encodingFormat: 'float',
         apiKey: this.configService.getOrThrow<string>('OPENAI_API_KEY'),
+        ...(openAiBaseUrl ? { configuration: { baseURL: openAiBaseUrl } } : {}),
       }),
       {
         collectionName: COLLECTION_NAME,
@@ -133,10 +141,14 @@ export class ChatService {
   }
 
   private createChatModel(): ChatOpenAI {
+    const openAiBaseUrl = this.configService.get<string>('OPENAI_BASE_URL')
+    const chatModel = this.configService.get<string>('OPENAI_CHAT_MODEL') ?? DEFAULT_CHAT_MODEL
+
     return new ChatOpenAI({
-      model: 'gpt-4o-mini',
+      model: chatModel,
       temperature: 0,
       apiKey: this.configService.getOrThrow<string>('OPENAI_API_KEY'),
+      ...(openAiBaseUrl ? { configuration: { baseURL: openAiBaseUrl } } : {}),
     })
   }
 

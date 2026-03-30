@@ -4,15 +4,16 @@ import { Document } from '@langchain/core/documents'
 import { OpenAIEmbeddings } from '@langchain/openai'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import {
-    BadRequestException,
-    Injectable,
-    InternalServerErrorException,
-    Logger,
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import pdfParse from 'pdf-parse'
 
 const COLLECTION_NAME = 'rag-documents'
+const DEFAULT_EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5'
 
 @Injectable()
 export class DocumentsService {
@@ -70,10 +71,15 @@ export class DocumentsService {
   private createVectorStore(): Chroma {
     const chromaUrl = this.configService.getOrThrow<string>('CHROMA_URL')
     const openAiKey = this.configService.getOrThrow<string>('OPENAI_API_KEY')
+    const openAiBaseUrl = this.configService.get<string>('OPENAI_BASE_URL')
+    const embeddingModel =
+      this.configService.get<string>('OPENAI_EMBEDDING_MODEL') ?? DEFAULT_EMBEDDING_MODEL
 
     return new Chroma(new OpenAIEmbeddings({
-      model: 'text-embedding-3-small',
+      model: embeddingModel,
+      encodingFormat: 'float',
       apiKey: openAiKey,
+      ...(openAiBaseUrl ? { configuration: { baseURL: openAiBaseUrl } } : {}),
     }), {
       collectionName: COLLECTION_NAME,
       url: chromaUrl,
