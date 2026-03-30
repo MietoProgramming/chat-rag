@@ -1,0 +1,9 @@
+services:
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chat-rag-chroma
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma-data:/chroma/chroma

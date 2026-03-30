@@ -1,0 +1,21 @@
+{
+    "name": "chat-rag",
+    "private": true,
+    "packageManager": "bun@1.3.11",
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ],
+    "scripts": {
+        "infra:up": "docker compose up -d",
+        "infra:down": "docker compose down",
+        "infra:logs": "docker compose logs -f chroma",
+        "infra:health": "curl -fsS http://localhost:8000/api/v1/heartbeat",
+        "dev:backend": "bun --cwd apps/backend run start:dev",
+        "dev:frontend": "bun --cwd apps/frontend run dev",
+        "dev": "concurrently \"bun run dev:backend\" \"bun run dev:frontend\""
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1"
+    }
+}
