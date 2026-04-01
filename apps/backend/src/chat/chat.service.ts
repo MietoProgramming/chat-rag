@@ -15,7 +15,7 @@ import { ChatHistoryItemDto, ChatMessageRequestDto } from './dto/chat-message.dt
 const COLLECTION_NAME = 'rag-documents'
 const NO_CONTEXT_ANSWER =
   'I could not find relevant information in the uploaded documents to answer that question.'
-const DEFAULT_CHAT_MODEL = 'qwen/qwen3-8b'
+const DEFAULT_CHAT_MODEL = 'qwen/qwen3.5-9b'
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5'
 
 interface PromptInput {
