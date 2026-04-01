@@ -173,6 +173,115 @@ pre code {
   backdrop-filter: blur(4px);
 }
 
+.chat-message-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.chat-markdown {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-markdown> :first-child,
+.think-markdown> :first-child {
+  margin-top: 0;
+}
+
+.chat-markdown> :last-child,
+.think-markdown> :last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown p,
+.think-markdown p {
+  margin: 0.35rem 0;
+}
+
+.chat-markdown ul,
+.chat-markdown ol,
+.think-markdown ul,
+.think-markdown ol {
+  margin: 0.35rem 0 0.35rem 1.2rem;
+  padding: 0;
+}
+
+.chat-markdown li,
+.think-markdown li {
+  margin: 0.18rem 0;
+}
+
+.chat-markdown pre,
+.think-markdown pre {
+  margin: 0.45rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-strong) 78%, black 22%);
+  padding: 0.55rem 0.65rem;
+}
+
+.chat-markdown blockquote,
+.think-markdown blockquote {
+  margin: 0.4rem 0;
+  border-left: 3px solid color-mix(in oklab, var(--lagoon-deep) 36%, var(--line));
+  padding: 0.12rem 0 0.12rem 0.68rem;
+  color: var(--sea-ink-soft);
+}
+
+.think-block {
+  margin: 0;
+  border: 1px solid color-mix(in oklab, var(--lagoon-deep) 22%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--surface-strong) 88%, var(--lagoon) 12%);
+  overflow: hidden;
+}
+
+.think-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 0.48rem 0.72rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sea-ink-soft);
+}
+
+.think-summary::-webkit-details-marker {
+  display: none;
+}
+
+.think-summary::before {
+  content: "▸";
+  font-size: 0.85rem;
+  color: var(--lagoon-deep);
+  transform: translateY(-1px);
+  transition: transform 170ms ease;
+}
+
+.think-block[open] .think-summary {
+  border-bottom: 1px solid color-mix(in oklab, var(--lagoon-deep) 18%, var(--line));
+  background: color-mix(in oklab, var(--surface-strong) 72%, var(--lagoon) 28%);
+}
+
+.think-block[open] .think-summary::before {
+  transform: rotate(90deg) translateY(1px);
+}
+
+.think-markdown {
+  margin: 0;
+  padding: 0.65rem 0.8rem 0.78rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: color-mix(in oklab, var(--sea-ink) 84%, var(--sea-ink-soft));
+}
+
 .feature-card {
   background: linear-gradient(165deg, color-mix(in oklab, var(--surface-strong) 93%, white 7%), var(--surface));
   box-shadow:
@@ -252,6 +361,7 @@ a {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

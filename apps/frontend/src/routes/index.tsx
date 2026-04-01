@@ -1,13 +1,42 @@
-import type { UploadResponse } from '@chat-rag/shared'
+import type { DocumentRecord, UploadResponse } from '@chat-rag/shared'
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import ChatPanel from '../components/chat-panel'
 import UploadPanel from '../components/upload-panel'
+import { listDocumentsFn } from '../lib/server/api'
 
 export const Route = createFileRoute('/')({ component: App })
 
 function App() {
+  const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [latestUpload, setLatestUpload] = useState<UploadResponse | null>(null)
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false)
+  const [documentsError, setDocumentsError] = useState<string | null>(null)
+
+  const refreshDocuments = useCallback(async () => {
+    setIsLoadingDocuments(true)
+
+    try {
+      const result = await listDocumentsFn()
+      setDocuments(result.documents)
+      setLatestUpload(result.documents[0] ?? null)
+      setDocumentsError(null)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to load indexed documents right now.'
+
+      setDocumentsError(message)
+      throw new Error(message)
+    } finally {
+      setIsLoadingDocuments(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshDocuments().catch(() => undefined)
+  }, [refreshDocuments])
 
   return (
     <main className="page-wrap px-4 pb-8 pt-10">
@@ -19,13 +48,23 @@ function App() {
           Document Q&A Chatbot
         </h1>
         <p className="mt-3 max-w-3xl text-sm text-[var(--sea-ink-soft)] sm:text-base">
-          Upload PDFs or text files, then ask questions. Responses are generated only from chunks retrieved from your indexed context.
+          Upload PDFs or text files, then ask questions. Responses are generated
+          only from chunks retrieved from your indexed context.
         </p>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
-        <UploadPanel onUploadComplete={setLatestUpload} />
-        <ChatPanel latestUpload={latestUpload} />
+        <UploadPanel
+          documents={documents}
+          isLoadingDocuments={isLoadingDocuments}
+          documentsError={documentsError}
+          onUploadComplete={setLatestUpload}
+          onDocumentsReload={refreshDocuments}
+        />
+        <ChatPanel
+          latestUpload={latestUpload}
+          totalDocuments={documents.length}
+        />
       </div>
     </main>
   )

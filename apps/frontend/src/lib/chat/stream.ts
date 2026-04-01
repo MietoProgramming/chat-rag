@@ -62,7 +62,9 @@ function parseStreamEvent(line: string): ChatStreamEvent {
         return {
           source: source.source,
           chunkIndex:
-            typeof source.chunkIndex === 'number' ? source.chunkIndex : undefined,
+            typeof source.chunkIndex === 'number'
+              ? source.chunkIndex
+              : undefined,
         }
       })
 
@@ -93,11 +95,13 @@ function drainBuffer(
   onEvent: (event: ChatStreamEvent) => void,
 ): string {
   let pendingBuffer = buffer
+  let hasNextLine = true
 
-  while (true) {
+  while (hasNextLine) {
     const lineBreakIndex = pendingBuffer.indexOf('\n')
     if (lineBreakIndex < 0) {
-      return pendingBuffer
+      hasNextLine = false
+      continue
     }
 
     const rawLine = pendingBuffer.slice(0, lineBreakIndex)
@@ -115,6 +119,8 @@ function drainBuffer(
       throw new Error(event.message)
     }
   }
+
+  return pendingBuffer
 }
 
 export async function streamChatMessage({
@@ -140,13 +146,15 @@ export async function streamChatMessage({
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let streamDone = false
 
-  while (true) {
+  while (!streamDone) {
     const { done, value } = await reader.read()
+    streamDone = done
 
     if (done) {
       buffer += decoder.decode()
-      break
+      continue
     }
 
     buffer += decoder.decode(value, { stream: true })

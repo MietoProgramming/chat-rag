@@ -1,4 +1,10 @@
-import type { ChatRequest, ChatResponse, UploadResponse } from '@chat-rag/shared'
+import type {
+    ChatRequest,
+    ChatResponse,
+    DeleteDocumentResponse,
+    ListDocumentsResponse,
+    UploadResponse,
+} from '@chat-rag/shared'
 import { createServerFn } from '@tanstack/react-start'
 import { buildBackendUrl } from './backend-url'
 
@@ -37,6 +43,67 @@ export const uploadDocumentFn = createServerFn({ method: 'POST' })
       method: 'POST',
       body: data,
     })
+
+    if (!response.ok) {
+      throw new Error(await readBackendError(response))
+    }
+
+    return (await response.json()) as UploadResponse
+  })
+
+export const listDocumentsFn = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    const response = await fetch(buildBackendUrl('/api/documents'), {
+      method: 'GET',
+    })
+
+    if (!response.ok) {
+      throw new Error(await readBackendError(response))
+    }
+
+    return (await response.json()) as ListDocumentsResponse
+  },
+)
+
+export const deleteDocumentFn = createServerFn({ method: 'POST' })
+  .inputValidator((input: { documentId: string }) => input)
+  .handler(async ({ data }) => {
+    const documentId = data.documentId.trim()
+    if (documentId.length === 0) {
+      throw new Error('Document id is required.')
+    }
+
+    const response = await fetch(
+      buildBackendUrl(`/api/documents/${encodeURIComponent(documentId)}`),
+      {
+        method: 'DELETE',
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(await readBackendError(response))
+    }
+
+    return (await response.json()) as DeleteDocumentResponse
+  })
+
+export const updateDocumentFn = createServerFn({ method: 'POST' })
+  .inputValidator((input: FormData) => input)
+  .handler(async ({ data }) => {
+    const documentId = data.get('documentId')
+    if (typeof documentId !== 'string' || documentId.trim().length === 0) {
+      throw new Error('Document id is required.')
+    }
+
+    const response = await fetch(
+      buildBackendUrl(
+        `/api/documents/${encodeURIComponent(documentId.trim())}`,
+      ),
+      {
+        method: 'PUT',
+        body: data,
+      },
+    )
 
     if (!response.ok) {
       throw new Error(await readBackendError(response))

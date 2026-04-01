@@ -51,6 +51,13 @@ bun run dev
 - `POST /api/documents/upload`
 	- multipart/form-data with `file` field
 	- accepts `application/pdf` and `text/plain`
+- `GET /api/documents`
+	- returns indexed document list with ids, upload timestamps, and chunk counts
+- `PUT /api/documents/:documentId`
+	- multipart/form-data with `file` field
+	- replaces an indexed document by removing old chunks and re-indexing the new file
+- `DELETE /api/documents/:documentId`
+	- removes all indexed chunks for that document
 - `POST /api/chat/message`
 	- JSON payload: `{ "message": string, "history"?: { "role": "user" | "assistant", "content": string }[] }`
 - `POST /api/chat/stream`

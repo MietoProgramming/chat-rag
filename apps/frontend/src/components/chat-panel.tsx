@@ -1,12 +1,19 @@
 import type { ChatRequest, UploadResponse } from '@chat-rag/shared'
 import type { FormEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { streamChatMessage } from '../lib/chat/stream'
-import { clearChatHistory, loadChatHistory, saveChatHistory } from '../lib/storage/chat-history'
+import {
+    clearChatHistory,
+    loadChatHistory,
+    saveChatHistory,
+} from '../lib/storage/chat-history'
 import type { UiChatMessage } from '../lib/types'
 
 interface ChatPanelProps {
   latestUpload: UploadResponse | null
+  totalDocuments: number
 }
 
 function createMessageId(): string {
@@ -32,8 +39,167 @@ function sourceLabel(source: { source: string; chunkIndex?: number }): string {
   return source.source
 }
 
-export default function ChatPanel({ latestUpload }: ChatPanelProps) {
-  const [messages, setMessages] = useState<UiChatMessage[]>(() => loadChatHistory())
+const THINK_OPEN_TAG = '<think>'
+const THINK_CLOSE_TAG = '</think>'
+
+type MessageSegment =
+  | {
+      type: 'text'
+      content: string
+    }
+  | {
+      type: 'think'
+      content: string
+      incomplete: boolean
+    }
+
+const MARKDOWN_PLUGINS = [remarkGfm]
+
+interface MarkdownContentProps {
+  content: string
+  className: string
+}
+
+function MarkdownContent({ content, className }: MarkdownContentProps) {
+  return (
+    <div className={className}>
+      <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{content}</ReactMarkdown>
+    </div>
+  )
+}
+
+interface ThinkContentProps {
+  content: string
+  incomplete: boolean
+}
+
+function ThinkContent({ content, incomplete }: ThinkContentProps) {
+  const [isOpen, setIsOpen] = useState(incomplete)
+
+  useEffect(() => {
+    if (incomplete) {
+      setIsOpen(true)
+      return
+    }
+
+    setIsOpen(false)
+  }, [incomplete])
+
+  return (
+    <details
+      className="think-block"
+      open={isOpen}
+      onToggle={(event) => {
+        if (incomplete) {
+          setIsOpen(true)
+          return
+        }
+
+        setIsOpen(event.currentTarget.open)
+      }}
+    >
+      <summary className="think-summary">
+        {incomplete ? 'Model thinking (streaming)' : 'Model thinking'}
+      </summary>
+      <MarkdownContent content={content} className="think-markdown" />
+    </details>
+  )
+}
+
+function parseMessageSegments(content: string): MessageSegment[] {
+  const segments: MessageSegment[] = []
+  let cursor = 0
+
+  while (cursor < content.length) {
+    const openTagIndex = content.indexOf(THINK_OPEN_TAG, cursor)
+
+    if (openTagIndex === -1) {
+      const trailingText = content.slice(cursor)
+      if (trailingText.length > 0) {
+        segments.push({
+          type: 'text',
+          content: trailingText,
+        })
+      }
+      break
+    }
+
+    if (openTagIndex > cursor) {
+      segments.push({
+        type: 'text',
+        content: content.slice(cursor, openTagIndex),
+      })
+    }
+
+    const thinkStartIndex = openTagIndex + THINK_OPEN_TAG.length
+    const closeTagIndex = content.indexOf(THINK_CLOSE_TAG, thinkStartIndex)
+
+    if (closeTagIndex === -1) {
+      const streamingThinkText = content.slice(thinkStartIndex)
+      if (streamingThinkText.length > 0) {
+        segments.push({
+          type: 'think',
+          content: streamingThinkText,
+          incomplete: true,
+        })
+      }
+      break
+    }
+
+    segments.push({
+      type: 'think',
+      content: content.slice(thinkStartIndex, closeTagIndex),
+      incomplete: false,
+    })
+
+    cursor = closeTagIndex + THINK_CLOSE_TAG.length
+  }
+
+  if (segments.length === 0) {
+    return [
+      {
+        type: 'text',
+        content,
+      },
+    ]
+  }
+
+  return segments
+}
+
+function renderMessageContent(content: string, messageId: string) {
+  const segments = parseMessageSegments(content)
+
+  return segments.map((segment, index) => {
+    const segmentKey = `${messageId}-${index}`
+
+    if (segment.type === 'text') {
+      return (
+        <MarkdownContent
+          key={segmentKey}
+          content={segment.content}
+          className="chat-markdown"
+        />
+      )
+    }
+
+    return (
+      <ThinkContent
+        key={segmentKey}
+        content={segment.content}
+        incomplete={segment.incomplete}
+      />
+    )
+  })
+}
+
+export default function ChatPanel({
+  latestUpload,
+  totalDocuments,
+}: ChatPanelProps) {
+  const [messages, setMessages] = useState<UiChatMessage[]>(() =>
+    loadChatHistory(),
+  )
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -50,12 +216,20 @@ export default function ChatPanel({ latestUpload }: ChatPanelProps) {
   }, [messages, isSending])
 
   const subtitle = useMemo(() => {
-    if (!latestUpload) {
+    if (totalDocuments === 0) {
       return 'Upload a file, then ask a question to begin retrieval.'
     }
 
-    return `Ready with ${latestUpload.filename} in collection ${latestUpload.collectionName}.`
-  }, [latestUpload])
+    if (!latestUpload) {
+      return `${totalDocuments} indexed documents are ready for retrieval.`
+    }
+
+    if (totalDocuments === 1) {
+      return `Ready with ${latestUpload.filename} in collection ${latestUpload.collectionName}.`
+    }
+
+    return `Ready with ${totalDocuments} indexed documents. Most recent: ${latestUpload.filename}.`
+  }, [latestUpload, totalDocuments])
 
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -93,33 +267,33 @@ export default function ChatPanel({ latestUpload }: ChatPanelProps) {
           message: trimmedInput,
           history: mapHistory(priorMessages),
         },
-        onEvent: (event) => {
-          if (event.type === 'sources') {
+        onEvent: (streamEvent) => {
+          if (streamEvent.type === 'sources') {
             setMessages((previous) =>
-              previous.map((message) => {
-                if (message.id !== assistantMessageId) {
-                  return message
+              previous.map((chatMessage) => {
+                if (chatMessage.id !== assistantMessageId) {
+                  return chatMessage
                 }
 
                 return {
-                  ...message,
-                  sources: event.sources,
+                  ...chatMessage,
+                  sources: streamEvent.sources,
                 }
               }),
             )
             return
           }
 
-          if (event.type === 'token') {
+          if (streamEvent.type === 'token') {
             setMessages((previous) =>
-              previous.map((message) => {
-                if (message.id !== assistantMessageId) {
-                  return message
+              previous.map((chatMessage) => {
+                if (chatMessage.id !== assistantMessageId) {
+                  return chatMessage
                 }
 
                 return {
-                  ...message,
-                  content: `${message.content}${event.token}`,
+                  ...chatMessage,
+                  content: `${chatMessage.content}${streamEvent.token}`,
                 }
               }),
             )
@@ -128,28 +302,32 @@ export default function ChatPanel({ latestUpload }: ChatPanelProps) {
       })
 
       setMessages((previous) =>
-        previous.map((message) => {
-          if (message.id !== assistantMessageId || message.content.trim().length > 0) {
-            return message
+        previous.map((chatMessage) => {
+          if (
+            chatMessage.id !== assistantMessageId ||
+            chatMessage.content.trim().length > 0
+          ) {
+            return chatMessage
           }
 
           return {
-            ...message,
+            ...chatMessage,
             content: 'No response was generated from the stream.',
           }
         }),
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to reach chat service.'
-      setErrorMessage(message)
+      const errorText =
+        error instanceof Error ? error.message : 'Unable to reach chat service.'
+      setErrorMessage(errorText)
 
       setMessages((previous) =>
-        previous.filter((message) => {
-          if (message.id !== assistantMessageId) {
+        previous.filter((chatMessage) => {
+          if (chatMessage.id !== assistantMessageId) {
             return true
           }
 
-          return message.content.trim().length > 0
+          return chatMessage.content.trim().length > 0
         }),
       )
     } finally {
@@ -168,8 +346,12 @@ export default function ChatPanel({ latestUpload }: ChatPanelProps) {
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
           <p className="island-kicker mb-2">Chat</p>
-          <h2 className="m-0 text-xl font-bold text-[var(--sea-ink)]">Document Q&A Assistant</h2>
-          <p className="m-0 mt-1 text-sm text-[var(--sea-ink-soft)]">{subtitle}</p>
+          <h2 className="m-0 text-xl font-bold text-[var(--sea-ink)]">
+            Document Q&A Assistant
+          </h2>
+          <p className="m-0 mt-1 text-sm text-[var(--sea-ink-soft)]">
+            {subtitle}
+          </p>
         </div>
 
         <button
@@ -184,7 +366,8 @@ export default function ChatPanel({ latestUpload }: ChatPanelProps) {
       <div className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.62)] p-3">
         {!hasMessages ? (
           <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[rgba(255,255,255,0.58)] p-5 text-sm text-[var(--sea-ink-soft)]">
-            Ask about specific details from your uploaded files. Responses are grounded to retrieved chunks from Chroma.
+            Ask about specific details from your uploaded files. Responses are
+            grounded to retrieved chunks from Chroma.
           </div>
         ) : null}
 
@@ -197,9 +380,13 @@ export default function ChatPanel({ latestUpload }: ChatPanelProps) {
                 : 'border border-[var(--line)] bg-[rgba(255,255,255,0.84)] text-[var(--sea-ink)]'
             }`}
           >
-            <p className="m-0 whitespace-pre-wrap">{message.content}</p>
+            <div className="chat-message-content">
+              {renderMessageContent(message.content, message.id)}
+            </div>
 
-            {message.role === 'assistant' && message.sources && message.sources.length > 0 ? (
+            {message.role === 'assistant' &&
+            message.sources &&
+            message.sources.length > 0 ? (
               <div className="mt-3 border-t border-[var(--line)] pt-2">
                 <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--sea-ink-soft)]">
                   Sources
